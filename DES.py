@@ -75,6 +75,9 @@ def main():
     if (sys.argv[1] == '-e'):
         cipher.encrypt(sys.argv[2], sys.argv[4])
 
+    if (sys.argv[1] == "-d"):
+        cipher.decrypt(sys.argv[2], sys.argv[4])
+
 class DES():
 
     def __init__(self, key):
@@ -166,8 +169,61 @@ class DES():
 
 
 
-    # def decrypt(self, encrypted_file, outfile):
+    def decrypt(self, encrypted_file, outfile):
+        with open(encrypted_file, 'r') as file:
+            plaintext = file.read()
+        encrypted_text = BitVector(hexstring=plaintext)
+        decrypted_text = BitVector(size = 0)
+        
+        for i in range(0, len(encrypted_text)//64):
+            block = encrypted_text[i * 64: (i + 1) * 64]
 
+            # Initialize permutation of the block
+            LBlock, RBlock = block.divide_into_two()
+            # Right till here
+            # print(f"Left: {LBlock.get_hex_string_from_bitvector()}\nRight: {RBlock.get_hex_string_from_bitvector()}")
+
+            for round in range(15, -1, -1):
+
+                temp_R = RBlock
+                RBlock = RBlock.permute(expansion_permutation)
+                # if round == 0:
+                #     print(RBlock.get_hex_string_from_bitvector())
+                # good till now
+                
+                RBlock ^= self.round_keys[round]
+                # if round == 0:
+                #     print(RBlock.get_hex_string_from_bitvector())
+                # good till now
+
+                # s-box
+                result = BitVector(size=0)
+                for j in range(8):
+                    six_bits = RBlock[j * 6: (j + 1) * 6]
+
+                    row = int(six_bits[0] * 2 + six_bits[5])
+                    col = int(six_bits[1:5])
+                    
+
+                    substituted_value = s_boxes[j][row][col]
+
+                    substituted_bv = BitVector(intVal=substituted_value, size=4)
+
+                    result += substituted_bv
+                
+
+                result = result.permute(p_box_permutation)
+                
+                RBlock = LBlock ^ result
+                LBlock = temp_R
+
+            decrypted_text += RBlock
+            decrypted_text += LBlock
+
+        self.decrypted_txt = decrypted_text.get_text_from_bitvector()
+        
+        with open(outfile, 'w') as file:
+            file.write(self.decrypted_txt)
 
 
 if __name__ == "__main__":
