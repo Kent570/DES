@@ -64,14 +64,26 @@ s_boxes[7] = [ [13,2,8,4,6,15,11,1,10,9,3,14,5,0,12,7],
                [7,11,4,1,9,12,14,2,0,6,10,13,15,3,5,8],
                [2,1,14,7,4,10,8,13,15,12,9,0,3,5,6,11] ]
 
+p_box_permutation = [15, 6, 19, 20, 28, 11, 27, 16,
+                     0, 14, 22, 25, 4, 17, 30, 9,
+                     1, 7, 23, 13, 31, 26, 2, 8,
+                     18, 12, 29, 5, 21, 10, 3, 24]
+
+def main():
+    cipher = DES(key=sys.argv[3])
+
+    if (sys.argv[1] == '-e'):
+        cipher.encrypt(sys.argv[2], sys.argv[4])
+
 class DES():
 
     def __init__(self, key):
-        self.key = key 
-
         # Generate encryption key
+        with open(key, 'r') as file:
+            key = file.read()
+
         self.encryption_key = BitVector(textstring = key)
-        self.encryption_key = self.key.permute(key_permutation_1)
+        self.encryption_key = self.encryption_key.permute(key_permutation_1)
 
 
         # Generate round keys
@@ -82,8 +94,9 @@ class DES():
             shift = shifts_for_round_key_gen[round_count]
             LKey << shift
             RKey << shift
-            key = LKey + RKey
-            self.round_keys.append(key.permute(key_permutation_2))
+            temp_key = LKey + RKey
+            round_key = temp_key.permute(key_permutation_2)
+            self.round_keys.append(round_key)
 
     
 
@@ -91,19 +104,71 @@ class DES():
     def encrypt(self, message_file, outfile):
         with open(message_file, 'r') as file:
             plaintext = file.read()
-        plaintext_bv = BitVector(text=plaintext)
+        plaintext_bv = BitVector(textstring=plaintext)
         cipher_bv = BitVector(size = 0)
         
         for i in range(0, len(plaintext_bv)//64):
             block = plaintext_bv[i * 64: (i + 1) * 64]
-            
+
             # Initialize permutation of the block
-            block = block.permute(expansion_permutation)
+            LBlock, RBlock = block.divide_into_two()
+            # Right till here
+            # print(f"Left: {LBlock.get_hex_string_from_bitvector()}\nRight: {RBlock.get_hex_string_from_bitvector()}")
 
-            # DES 
             for round in range(16):
-                block ^= self.round_keys[round]
+
+                temp_R = RBlock
+                RBlock = RBlock.permute(expansion_permutation)
+                # if round == 0:
+                #     print(RBlock.get_hex_string_from_bitvector())
+                # good till now
+                
+                RBlock ^= self.round_keys[round]
+                # if round == 0:
+                #     print(RBlock.get_hex_string_from_bitvector())
+                # good till now
+
+                # s-box
+                result = BitVector(size=0)
+                for j in range(8):
+                    six_bits = RBlock[j * 6: (j + 1) * 6]
+
+                    row = int(six_bits[0] * 2 + six_bits[5])
+                    col = int(six_bits[1:5])
+                    
+
+                    substituted_value = s_boxes[j][row][col]
+                    # if round == 0:
+                    #     print(row, col)
+                        # print(substituted_value)
+
+                    substituted_bv = BitVector(intVal=substituted_value, size=4)
+
+                    result += substituted_bv
+                
+                # if round == 0:
+                #     print(result.get_hex_string_from_bitvector())
+
+                result = result.permute(p_box_permutation)
+                
+                RBlock = LBlock ^ result
+                LBlock = temp_R
+
+            cipher_bv += RBlock
+            cipher_bv += LBlock
+
+        self.cipher = cipher_bv.get_hex_string_from_bitvector()
+        
+        with open(outfile, 'w') as file:
+            file.write(self.cipher)
+            
 
 
 
-    def decrypt(self, encrypted_file, outfile):
+
+    # def decrypt(self, encrypted_file, outfile):
+
+
+
+if __name__ == "__main__":
+    main()
